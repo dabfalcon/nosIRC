@@ -20,135 +20,189 @@
 
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/socket.h>
-//#include <sys/filio.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <strings.h>
-#include <signal.h>
-#include <netdb.h>
-#include <time.h>
-#include <errno.h>
-#include <pthread.h>
-#include <ctype.h>
+//weig0018
 
-struct client_thread {
-  pthread_t thread;
-  int thread_id;
-  int fd;
+#include <stdio.h>//standard input output
+#include <stdlib.h>//standard library
+#include <unistd.h>//miscelanious symbols and types
+#include <sys/socket.h>//used for socklen_t
+#include <sys/ioctl.h>//function ioctl
+#include <fcntl.h>//used for file control options
+#include <netinet/in.h>//used for incoming ports and addresses
+#include <string.h>//used for strings
+#include <strings.h>//used for strings
+#include <signal.h>//used for symbolic constants
+#include <netdb.h>//used for hostent
+#include <time.h>//used for time or timing
+#include <errno.h>//used for reporting and retrieving error codes
+#include <pthread.h>//used for threads
+#include <ctype.h>//transforms characters
+#include <sys/time.h>//used for setitimer
+#include <unistd.h>//used to pause
+#include <signal.h>//used for signal
 
-  char nickname[32];
+struct client_thread
+{
 
-  int state;
-  int user_command_seen;
-  int user_has_registered;
-  time_t timeout;
+	pthread_t thread;
+	int thread_id;
+	int fd;
 
-  char line[1024];
-  int line_len;
+	char nickname[32];
 
-  int next_message;
+	int state;
+	int user_command_seen;
+	int user_has_registered;
+	time_t timeout;
+
+	char line[1024];
+	int line_len;
+
+	int next_message;
+
 };
 
 pthread_rwlock_t message_log_lock;
 
 int create_listen_socket(int port)
 {
-  int sock = socket(AF_INET,SOCK_STREAM,0);
-  if (sock==-1) return -1;
 
-  int on=1;
-  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(on)) == -1) {
-    close(sock); return -1;
-  }
-  if (ioctl(sock, FIONBIO, (char *)&on) == -1) {
-    close(sock); return -1;
-  }
-  
-  /* Bind it to the next port we want to try. */
-  struct sockaddr_in address;
-  bzero((char *) &address, sizeof(address));
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = INADDR_ANY;
-  address.sin_port = htons(port);
-  if (bind(sock, (struct sockaddr *) &address, sizeof(address)) == -1) {
-    close(sock); return -1;
-  } 
+	int sock = socket(AF_INET,SOCK_STREAM,0);
+	if (sock==-1) return -1;
 
-  if (listen(sock, 20) != -1) return sock;
+	int on=1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(on)) == -1) {
+	close(sock); return -1;
+	}
+	if (ioctl(sock, FIONBIO, (char *)&on) == -1) {
+	close(sock); return -1;
+	}
 
-  close(sock);
-  return -1;
+	//time for the next port
+	struct sockaddr_in address;
+	bzero((char *) &address, sizeof(address));
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = INADDR_ANY;
+	address.sin_port = htons(port);
+	if (bind(sock, (struct sockaddr *) &address, sizeof(address)) == -1) {
+	close(sock); return -1;
+	} 
+
+	if (listen(sock, 20) != -1) return sock;
+
+	close(sock);
+	return -1;
+	}
+
+	int accept_incoming(int sock)
+	{
+	struct sockaddr addr;
+	unsigned int addr_len = sizeof addr;
+	int asock;
+	if ((asock = accept(sock, &addr, &addr_len)) != -1) {
+	return asock;
+	}
+
+	return -1;
+
 }
-
-int accept_incoming(int sock)
-{
-  struct sockaddr addr;
-  unsigned int addr_len = sizeof addr;
-  int asock;
-  if ((asock = accept(sock, &addr, &addr_len)) != -1) {
-    return asock;
-  }
-
-  return -1;
-}
-
-int read_from_socket(int sock,unsigned char *buffer,int *count,int buffer_size,
-		     int timeout)
-{
-  fcntl(sock,F_SETFL,fcntl(sock, F_GETFL, NULL)|O_NONBLOCK);
-
-
-  int t=time(0)+timeout;
-  if (*count>=buffer_size) return 0;
-  int r=read(sock,&buffer[*count],buffer_size-*count);
-  while(r!=0) {
-    if (r>0) {
-      (*count)+=r;
-      break;
-    }
-    r=read(sock,&buffer[*count],buffer_size-*count);
-    if (r==-1&&errno!=EAGAIN) {
-      perror("read() returned error. Stopping reading from socket.");
-      return -1;
-    } else usleep(100000);
-    // timeout after a few seconds of nothing
-    if (time(0)>=t) break;
-  }
-  buffer[*count]=0;
-  return 0;
-}
-
 
 int main(int argc,char **argv)
 {
-  signal(SIGPIPE, SIG_IGN);
+	signal(SIGPIPE, SIG_IGN);
 
-  int r;
+	int r;
+	char buffer[100];
+	buffer[100] = '\0';
 
-  if (argc!=2) {
-  fprintf(stderr,"usage: sample <tcp port>\n");
-  exit(-1);
-  }
-  
-  int master_socket = create_listen_socket(atoi(argv[1]));
-  
-  fcntl(master_socket,F_SETFL,fcntl(master_socket, F_GETFL, NULL)&(~O_NONBLOCK));  
-  
-  while(1) {
-    int client_sock = accept_incoming(master_socket);
-    if (client_sock!=-1) {
-		write(client_sock,":ice 020 * : YAYYAY\n",20);
-		
-		r=read_from_socket(sock,(unsigned char *)buffer,&bytes,sizeof(buffer),2);
-		
-		write(client_sock,"Closing Link\n",13);
-		close(client_sock);
-    }
-  }
+	if (argc!=2) {
+	fprintf(stderr,"usage: sample <tcp port>\n");
+	exit(-1);
+	}
+
+	int master_socket = create_listen_socket(atoi(argv[1]));
+
+	fcntl(master_socket,F_SETFL,fcntl(master_socket, F_GETFL, NULL)&(~O_NONBLOCK));  
+
+	time_t start, end;
+	time(&start);
+	double elapsed;
+	int i;
+	int n;
+	int quits = 0;
+	char output[100];
+	char nickname[32];
+	char cmd[32];
+
+	while(true) {
+	int client_sock = accept_incoming(master_socket);
+
+	if (client_sock!=-1) {
+		bzero(buffer,99);
+		time(&start);
+		write(client_sock,":ice 020 * : initial connection\n",32);
+		while(1)
+		{
+			n = read(client_sock,buffer,99);
+			//printf("buffer: %s\n",buffer);
+			
+			if (strstr(buffer,"QUIT")!=NULL) {	
+
+				//write(client_sock,":ice Closing Link * : waiting 5 seconds for the connection to timeout\n",69);
+				close(client_sock);
+				break;
+			}
+			
+			
+			else if (strstr(buffer,"JOIN")!=NULL) {
+				printf("Recieved Join\n");
+				write(client_sock,":ice 241 * : JOIN command sent before registration\n",51);
+				time(&start); //message recieved so reset timeout
+			}
+			
+			else if (strstr(buffer,"PRIVMSG")!=NULL) {
+				printf("Recieved PM: %s\n",buffer);
+				write(client_sock,":ice 241 * : PRIVMSG command send before registration\n",53);
+				time(&start);  //message recieved so reset timeout
+			}
+			
+			else if (strstr(buffer,"NICK")!=NULL) {
+				sscanf(buffer,"%s %s",cmd,nickname);
+				printf("Recieved NICK: %s\n",nickname);
+				time(&start); //message recieved so reset timeout
+			}
+			
+			else if (strstr(buffer,"USER")!=NULL) {
+				//printf("Recieved USER\n");
+				sprintf(output,":ice 001 %s : CREATED USER\n",nickname);
+				write(client_sock,output,strlen(output));
+				sprintf(output,":ice 002 %s : CREATED USER\n",nickname);
+				write(client_sock,output,strlen(output));
+				sprintf(output,":ice 003 %s : CREATED USER\n",nickname);
+				write(client_sock,output,strlen(output));
+				sprintf(output,":ice 004 %s : CREATED USER\n",nickname);
+				write(client_sock,output,strlen(output));
+				sprintf(output,":ice 253 %s : CREATED USER\n",nickname);
+				write(client_sock,output,strlen(output));
+				sprintf(output,":ice 254 %s : CREATED USER\n",nickname);
+				write(client_sock,output,strlen(output));
+				sprintf(output,":ice 255 %s : CREATED USER\n",nickname);
+				write(client_sock,output,strlen(output));
+				time(&start);  //message recieved so reset timeout
+			}
+			
+			
+			else if (elapsed>=5.0) {
+				printf("Time Out\n");
+				write(client_sock,"ERROR :Closing Link: waiting 5 seconds\n",39);
+				close(client_sock);
+				break;
+			}
+			
+			time(&end);
+			elapsed = difftime(end, start);
+			
+		}
+	}
+	}
 }
