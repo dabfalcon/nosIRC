@@ -105,6 +105,8 @@ int accept_incoming(int sock)
 int main(int argc,char **argv)
 {
   signal(SIGPIPE, SIG_IGN);
+	
+  char users[20][2][32];
 
   int r;
   char buffer[100];
@@ -127,8 +129,10 @@ int main(int argc,char **argv)
   int quits = 0;
   char output[100];
   char nickname[32];
+  char username[32];
   char cmd[32];
   int registered = 0;
+  
   
   while(1) {
 	int client_sock = accept_incoming(master_socket);
@@ -181,8 +185,24 @@ int main(int argc,char **argv)
 			}
 			
 			else if (strstr(buffer,"USER")!=NULL) {
-				//printf("Recieved USER\n");
-				registered = 1;
+				sscanf(buffer,"%s %s",cmd,username);
+				printf("Recieved USER: %s\n",username);
+				for (i = 0; i < 20; i++) {
+					if (users[i][0]==username) {
+					printf("User already exists\n");
+					break;
+					}
+					else if (users[i][0][0]==NULL) {
+					printf("Added User %s\n",username);
+					sscanf(users[i][0],"%s",username);
+					}
+				}
+				printf("LIST OF USERS:\n");
+				for (i = 0; i < 20; i++) {
+					sscanf(username,"%s",users[i][0]);
+					printf("%s",username);
+				}
+				
 				sprintf(output,":ice 001 %s : CREATED USER\n",nickname);
 				write(client_sock,output,strlen(output));
 				sprintf(output,":ice 002 %s : CREATED USER\n",nickname);
