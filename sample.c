@@ -105,8 +105,6 @@ int accept_incoming(int sock)
 int main(int argc,char **argv)
 {
   signal(SIGPIPE, SIG_IGN);
-	
-  char users[20][2][32];
 
   int r;
   char buffer[100];
@@ -132,6 +130,11 @@ int main(int argc,char **argv)
   char username[32];
   char cmd[32];
   int registered = 0;
+  
+  char users[20][2][32];
+  for(i=0;i<20;i++) {
+	strcpy(users[i][0]," ");
+  }
   
   
   while(1) {
@@ -188,20 +191,25 @@ int main(int argc,char **argv)
 				sscanf(buffer,"%s %s",cmd,username);
 				printf("Recieved USER: %s\n",username);
 				for (i = 0; i < 20; i++) {
-					if (users[i][0]==username) {
-					printf("User already exists\n");
-					break;
+					if (strcmp(users[i][0],username)==0) {
+						printf("User already exists\n");
+						strcpy(users[i][1],nickname);
+						break;
 					}
-					else if (users[i][0][0]==NULL) {
-					printf("Added User %s\n",username);
-					sscanf(users[i][0],"%s",username);
+					else if (users[i][0][0]==' ') {
+						strcpy(users[i][0],username);
+						strcpy(users[i][1],nickname);
+						printf("added: %s at %d\n",users[i][0],i);
+						break;
 					}
 				}
 				printf("LIST OF USERS:\n");
 				for (i = 0; i < 20; i++) {
-					sscanf(username,"%s",users[i][0]);
-					printf("%s",username);
-				}
+					if (strcmp(users[i][0]," ")==0) {
+					break;
+					}
+					printf("Username: %s with Nickname: %s\n",users[i][0],users[i][1]);
+				}	
 				
 				sprintf(output,":ice 001 %s : CREATED USER\n",nickname);
 				write(client_sock,output,strlen(output));
